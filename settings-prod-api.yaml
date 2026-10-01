@@ -67,7 +67,8 @@ rainlangs:
     address: 0x2DdEa6131E0e46536c6b658D5ACFf922E6133be5
     network: robinhood
 local-db-remotes:
-  raindex: https://raindex-bootstrap-db.lon1.digitaloceanspaces.com/local-db-manifests/1779881382550/manifest.yaml
+  # Our own bootstrap snapshot (exported hourly from the prod API DB; tools/raindex-snapshot).
+  raindex: https://theriver.markets/raindex-db/latest/manifest.yaml
 local-db-sync:
   base:
     batch-size: 50
