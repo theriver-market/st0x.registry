@@ -1,0 +1,83 @@
+version: 6
+
+orders:
+  base:
+    raindex: base
+    inputs:
+      - token: input
+    outputs:
+      - token: output
+
+scenarios:
+  river-stop-base:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+
+deployments:
+  base:
+    order: base
+    scenario: river-stop-base
+
+builder:
+  name: Stop-loss
+  description: Sells a stock token for USDC once the DIA oracle price is at or below your trigger, never below oracle price x your floor.
+  short-description: Sell when the oracle price falls to your trigger.
+  deployments:
+    base:
+      name: Base stop-loss
+      description: >
+        Sells the deposited stock token for USDC once the onchain DIA price for
+        the stock is at or below the trigger. Each fill pays at least
+        DIA price x floor per token. Inactive while the oracle price is stale.
+      deposits:
+        - token: output
+      fields:
+        - binding: dia-id
+          name: DIA price feed (stock ticker)
+          description: The DIA feed for the stock being sold, e.g. "NVDA".
+          show-custom-field: true
+        - binding: trigger-price
+          name: Trigger price (USD per share)
+          description: The order can only fill when the DIA price is at or below this.
+          show-custom-field: true
+        - binding: floor-multiplier
+          name: Floor (fraction of oracle price)
+          description: Minimum accepted USDC per token as a fraction of the DIA price, e.g. 0.98.
+          show-custom-field: true
+          default: 0.98
+        - binding: oracle-price-timeout
+          name: Oracle price max age (seconds)
+          description: The order is inactive while the oracle price is older than this.
+          show-custom-field: true
+          default: 3600
+      select-tokens:
+        - key: output
+          name: Stock token to sell
+          description: The token sold when the stop triggers.
+        - key: input
+          name: Receive
+          description: The stablecoin you receive (USDC).
+---
+#raindex-subparser !Raindex subparser.
+#dia-subparser !DiaWords subparser (dia-price).
+#dia-id !The DIA feed id of the stock sold.
+#trigger-price !Fill only when the DIA price is at or below this (USD per share).
+#floor-multiplier !Minimum USDC per token as a fraction of the DIA price.
+#oracle-price-timeout !Max oracle price age in seconds.
+
+#calculate-io
+using-words-from raindex-subparser dia-subparser
+price _: dia-price(dia-id oracle-price-timeout),
+:ensure(less-than-or-equal-to(price trigger-price) "Stop not triggered"),
+max-output: max-positive-value(),
+io: mul(price floor-multiplier);
+
+#handle-io
+:;
+
+#handle-add-order
+:;
