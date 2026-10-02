@@ -1,0 +1,144 @@
+version: 6
+
+orders:
+  buy:
+    raindex: base
+    inputs:
+      - token: base
+    outputs:
+      - token: quote
+  sell:
+    raindex: base
+    inputs:
+      - token: quote
+    outputs:
+      - token: base
+
+scenarios:
+  cycle-buy:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      calc-fn: '''buy-calculate-io'
+      handle-fn: '''buy-handle-io'
+  cycle-sell:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      calc-fn: '''sell-calculate-io'
+      handle-fn: '''sell-handle-io'
+
+deployments:
+  buy:
+    order: buy
+    scenario: cycle-buy
+  sell:
+    order: sell
+    scenario: cycle-sell
+
+builder:
+  name: Buy low, sell high (cycle)
+  # Credit: buy/sell cycle logic from the Stonx Ladder handover (Josh's team, 2026-09-17), reuse confirmed 2026-10-02.
+  description: >
+    One rung of a buy/sell cycle (logic from the Stonx Ladder handover, 2026-09-17).
+    A rung is two orders sharing store keys with its siblings: no sale until every
+    buy in the strategy has filled, no rebuy until every sell has filled.
+  short-description: Buy at your price, sell higher, repeat.
+  deployments:
+    buy:
+      name: Cycle rung - buy side
+      description: Buys up to quantity at buy-price while the strategy is in its buy phase.
+      deposits:
+        - token: quote
+      fields:
+        - binding: quantity
+          name: Quantity (base token)
+        - binding: buy-price
+          name: Buy price (quote per base)
+        - binding: threshold
+          name: Phase threshold (total quantity minus one atomic unit per rung)
+        - binding: phase-key
+          name: Phase store key
+        - binding: bought-key
+          name: Bought store key
+      select-tokens:
+        - key: base
+          name: Token
+        - key: quote
+          name: Quote (USDC)
+    sell:
+      name: Cycle rung - sell side
+      description: Sells quantity at sell-price while the strategy is in its sell phase.
+      deposits:
+        - token: base
+      fields:
+        - binding: quantity
+          name: Quantity (base token)
+        - binding: sell-price
+          name: Sell price (quote per base)
+        - binding: threshold
+          name: Phase threshold
+        - binding: repeat-phase
+          name: Phase after the last sale (0 = repeat, 2 = finish)
+        - binding: phase-key
+          name: Phase store key
+        - binding: bought-key
+          name: Bought store key
+        - binding: sold-key
+          name: Sold store key
+        - binding: cycles-key
+          name: Cycles store key
+      select-tokens:
+        - key: base
+          name: Token
+        - key: quote
+          name: Quote (USDC)
+---
+#raindex-subparser !Raindex subparser.
+#calc-fn !Side-specific calculate-io source.
+#handle-fn !Side-specific handle-io source.
+#quantity !Base quantity for this rung.
+#buy-price !Quote per base paid by the buy side.
+#sell-price !Quote per base asked by the sell side.
+#threshold !Total strategy quantity minus one atomic unit per rung.
+#repeat-phase !0 to repeat after all sells fill, 2 to finish.
+#phase-key !Store key: 0 buy phase, 1 sell phase, 2 done.
+#bought-key !Store key: base bought this cycle.
+#sold-key !Store key: base sold this cycle.
+#cycles-key !Store key: completed cycles.
+
+#buy-calculate-io
+max-output: if(equal-to(get(phase-key) 0) mul(max(0 sub(quantity input-vault-before())) buy-price) 0),
+io: div(1 buy-price);
+
+#buy-handle-io
+filled: add(get(bought-key) input-vault-increase()),
+finished: greater-than-or-equal-to(filled threshold),
+:set(bought-key filled),
+:set(phase-key if(finished 1 0));
+
+#sell-calculate-io
+max-output: if(equal-to(get(phase-key) 1) quantity 0),
+io: sell-price;
+
+#sell-handle-io
+filled: add(get(sold-key) output-vault-decrease()),
+finished: greater-than-or-equal-to(filled threshold),
+:set(phase-key if(finished repeat-phase 1)),
+:set(sold-key if(finished 0 filled)),
+:set(bought-key if(finished 0 get(bought-key))),
+:set(cycles-key add(get(cycles-key) if(finished 1 0)));
+
+#calculate-io
+using-words-from raindex-subparser
+max-output io: call<'calc-fn>();
+
+#handle-io
+:call<'handle-fn>();
+
+#handle-add-order
+:;
