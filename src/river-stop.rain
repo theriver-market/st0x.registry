@@ -16,11 +16,27 @@ scenarios:
     bindings:
       raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
       dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      shares-per-token-fn: '''one-share'
+      wt-vault: ${order.outputs.0.token.address}
+  river-stop-base-wt:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      shares-per-token-fn: '''wt-vault-assets'
+      wt-vault: ${order.outputs.0.token.address}
 
 deployments:
   base:
     order: base
     scenario: river-stop-base
+  base-wt:
+    order: base
+    scenario: river-stop-base-wt
 
 builder:
   name: Stop-loss
@@ -61,6 +77,40 @@ builder:
         - key: input
           name: Receive
           description: The stablecoin you receive (USDC).
+    base-wt:
+      name: Base stop-loss (ST0x wt tokens)
+      description: >
+        Sells the deposited stock token for USDC once the onchain DIA price for
+        the stock is at or below the trigger. Each fill pays at least
+        DIA price x the vault's live shares-per-token x floor per token. Inactive while the oracle price is stale.
+      deposits:
+        - token: output
+      fields:
+        - binding: dia-id
+          name: DIA price feed (stock ticker)
+          description: The DIA feed for the stock being sold, e.g. "NVDA".
+          show-custom-field: true
+        - binding: trigger-price
+          name: Trigger price (USD per share)
+          description: The order can only fill when the DIA price is at or below this.
+          show-custom-field: true
+        - binding: floor-multiplier
+          name: Floor (fraction of oracle price)
+          description: Minimum accepted USDC per token as a fraction of the DIA price, e.g. 0.98.
+          show-custom-field: true
+          default: 0.98
+        - binding: oracle-price-timeout
+          name: Oracle price max age (seconds)
+          description: The order is inactive while the oracle price is older than this.
+          show-custom-field: true
+          default: 3600
+      select-tokens:
+        - key: output
+          name: Stock token to sell
+          description: The token sold when the stop triggers.
+        - key: input
+          name: Receive
+          description: The stablecoin you receive (USDC).
 ---
 #raindex-subparser !Raindex subparser.
 #dia-subparser !DiaWords subparser (dia-price).
@@ -68,13 +118,23 @@ builder:
 #trigger-price !Fill only when the DIA price is at or below this (USD per share).
 #floor-multiplier !Minimum USDC per token as a fraction of the DIA price.
 #oracle-price-timeout !Max oracle price age in seconds.
+#erc4626-subparser !ERC4626 words (erc4626-convert-to-assets).
+#shares-per-token-fn !Underlying shares per token sold: 1, or the wt vault's live ratio.
+#wt-vault !The wt vault token sold (wt deployment only).
+
+#one-share
+_: 1;
+
+#wt-vault-assets
+_: erc4626-convert-to-assets(wt-vault 1);
 
 #calculate-io
-using-words-from raindex-subparser dia-subparser
+using-words-from raindex-subparser dia-subparser erc4626-subparser
 price _: dia-price(dia-id oracle-price-timeout),
+shares-per-token: call<'shares-per-token-fn>(),
 :ensure(less-than-or-equal-to(price trigger-price) "Stop not triggered"),
 max-output: max-positive-value(),
-io: mul(price floor-multiplier);
+io: mul(price shares-per-token floor-multiplier);
 
 #handle-io
 :;
