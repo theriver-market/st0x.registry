@@ -1,0 +1,133 @@
+version: 6
+
+orders:
+  premium:
+    raindex: base
+    inputs:
+      - token: usdc
+    outputs:
+      - token: asset
+  exercise:
+    raindex: base
+    inputs:
+      - token: usdc
+    outputs:
+      - token: asset
+
+scenarios:
+  option-premium:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      calc-fn: '''premium-calculate-io'
+      handle-fn: '''premium-handle-io'
+  option-exercise:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      calc-fn: '''exercise-calculate-io'
+      handle-fn: '''exercise-handle-io'
+
+deployments:
+  premium:
+    order: premium
+    scenario: option-premium
+  exercise:
+    order: exercise
+    scenario: option-exercise
+
+builder:
+  name: Call option (Raindex-native prototype)
+  description: >
+    A physically settled call written as two Raindex orders that share store keys.
+    The premium order sells the option once: whoever pays the premium becomes the
+    holder (written to the order's store). The exercise order sells the asset at
+    the strike, only to the holder, only before expiry. No wrapper contract. The
+    writer still owns the vault, so collateral is not locked: see GOVERNANCE.md.
+  short-description: Sell the right to buy your stock at a fixed price until a date.
+  deployments:
+    premium:
+      name: Option - premium side
+      description: Takes the premium once and records the payer as holder.
+      deposits:
+        - token: asset
+      fields:
+        - binding: premium
+          name: Premium (USDC, whole option)
+        - binding: expiry
+          name: Expiry (unix seconds)
+        - binding: holder-key
+          name: Holder store key
+        - binding: dust
+          name: Asset handed over with the premium (smallest unit)
+          default: 1e-18
+      select-tokens:
+        - key: asset
+          name: Stock token
+        - key: usdc
+          name: USDC
+    exercise:
+      name: Option - exercise side
+      description: Sells up to amount at strike to the holder before expiry.
+      deposits:
+        - token: asset
+      fields:
+        - binding: strike
+          name: Strike (USDC per token)
+        - binding: amount
+          name: Amount (stock tokens)
+        - binding: expiry
+          name: Expiry (unix seconds)
+        - binding: holder-key
+          name: Holder store key
+        - binding: exercised-key
+          name: Exercised store key
+      select-tokens:
+        - key: asset
+          name: Stock token
+        - key: usdc
+          name: USDC
+---
+#raindex-subparser !Raindex subparser.
+#calc-fn !Side-specific calculate-io source.
+#handle-fn !Side-specific handle-io source.
+#premium !USDC paid once for the whole option.
+#dust !Asset sent with the premium (an order must output something).
+#strike !USDC per asset token on exercise.
+#amount !Asset tokens the holder may buy.
+#expiry !Unix seconds; nothing fills at or after it.
+#holder-key !Store key: holder address, 0 until sold.
+#exercised-key !Store key: asset already exercised.
+
+#premium-calculate-io
+max-output: if(every(equal-to(get(holder-key) 0) less-than(now() expiry)) dust 0),
+io: div(premium dust);
+
+#premium-handle-io
+:ensure(equal-to(get(holder-key) 0) "option already sold"),
+:ensure(greater-than-or-equal-to(input-vault-increase() premium) "premium short"),
+:set(holder-key order-counterparty());
+
+#exercise-calculate-io
+live: every(equal-to(order-counterparty() get(holder-key)) less-than(now() expiry)),
+max-output: if(live sub(amount get(exercised-key)) 0),
+io: strike;
+
+#exercise-handle-io
+:ensure(equal-to(order-counterparty() get(holder-key)) "not the holder"),
+:ensure(less-than(now() expiry) "expired"),
+:set(exercised-key add(get(exercised-key) output-vault-decrease()));
+
+#calculate-io
+using-words-from raindex-subparser
+max-output io: call<'calc-fn>();
+
+#handle-io
+:call<'handle-fn>();
+
+#handle-add-order
+:;
