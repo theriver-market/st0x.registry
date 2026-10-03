@@ -40,8 +40,8 @@ builder:
   name: Portfolio
   description: >
     Holds four stock tokens at your target weights and keeps them there. Your USDC
-    deposit buys each stock up to its share of the budget at the onchain oracle
-    price, then any stock that drifts above its weight is offered for one below its
+    deposit buys each stock up to its share of the budget by Dutch auction (from
+    just below the oracle price, rising to a cap, restarting after each buy), then any stock that drifts above its weight is offered for one below its
     weight at oracle prices minus a small fee. Never sells into USDC.
   short-description: Your own basket, kept at your weights.
   deployments:
@@ -90,6 +90,18 @@ builder:
           name: Oracle price max age (seconds)
           show-custom-field: true
           default: 10800
+        - binding: auction-start
+          name: First-buy auction start (fraction of oracle price), e.g. 0.99
+          show-custom-field: true
+          default: 0.99
+        - binding: auction-cap
+          name: First-buy auction cap (fraction of oracle price), e.g. 1.005
+          show-custom-field: true
+          default: 1.005
+        - binding: auction-seconds
+          name: Seconds for the auction to rise from start to cap
+          show-custom-field: true
+          default: 3600
       select-tokens:
         - key: usdc
           name: USDC
@@ -122,6 +134,9 @@ builder:
 #band !Drift above which a rebalance is offered.
 #fee !Discount to the oracle price paid to whoever rebalances.
 #oracle-price-timeout !Max oracle price age in seconds.
+#auction-start !Funding buys start at oracle x this.
+#auction-cap !Funding buys never pay above oracle x this.
+#auction-seconds !Seconds for the funding price to rise from start to cap.
 
 #calculate-io
 using-words-from raindex-subparser dia-subparser erc4626-subparser
@@ -146,11 +161,16 @@ v-in: div(value-in w-in),
 fund-usd: max(sub(mul(w-in budget) value-in) 0),
 gap-usd: div(sub(v-out v-in) add(div(1 w-out) div(1 w-in))),
 rebalance-usd: if(greater-than(v-out mul(v-in add(1 band))) gap-usd 0),
+elapsed: sub(now() get(hash(order-hash() 1))),
+auction: add(auction-start mul(sub(auction-cap auction-start) min(div(elapsed auction-seconds) 1))),
+fund-io: div(1 mul(p-in auction)),
+rebalance-io: mul(div(p-out p-in) sub(1 fee)),
 max-output: if(equal-to(in usdc) 0 if(equal-to(out usdc) fund-usd div(rebalance-usd p-out))),
-io: mul(div(p-out p-in) sub(1 fee));
+io: if(equal-to(out usdc) fund-io rebalance-io);
 
 #handle-io
-:;
+:set(hash(order-hash() 1) if(equal-to(output-token() usdc) now() get(hash(order-hash() 1))));
 
 #handle-add-order
-:;
+using-words-from raindex-subparser
+:set(hash(order-hash() 1) now());
