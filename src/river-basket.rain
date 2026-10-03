@@ -1,0 +1,156 @@
+version: 6
+
+orders:
+  base:
+    raindex: base
+    inputs:
+      - token: usdc
+      - token: t1
+      - token: t2
+      - token: t3
+      - token: t4
+    outputs:
+      - token: usdc
+      - token: t1
+      - token: t2
+      - token: t3
+      - token: t4
+
+scenarios:
+  river-basket-base:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      usdc: ${order.inputs.0.token.address}
+      t1: ${order.inputs.1.token.address}
+      t2: ${order.inputs.2.token.address}
+      t3: ${order.inputs.3.token.address}
+      t4: ${order.inputs.4.token.address}
+
+deployments:
+  base:
+    order: base
+    scenario: river-basket-base
+
+builder:
+  name: Portfolio
+  description: >
+    Holds four stock tokens at your target weights and keeps them there. Your USDC
+    deposit buys each stock up to its share of the budget at the onchain oracle
+    price, then any stock that drifts above its weight is offered for one below its
+    weight at oracle prices minus a small fee. Never sells into USDC.
+  short-description: Your own basket, kept at your weights.
+  deployments:
+    base:
+      name: Base portfolio (ST0x wt tokens)
+      description: Four ST0x wt stock tokens priced by DIA oracle x the vault's live ratio.
+      deposits:
+        - token: usdc
+      fields:
+        - binding: id1
+          name: DIA feed, stock 1
+          show-custom-field: true
+        - binding: id2
+          name: DIA feed, stock 2
+          show-custom-field: true
+        - binding: id3
+          name: DIA feed, stock 3
+          show-custom-field: true
+        - binding: id4
+          name: DIA feed, stock 4
+          show-custom-field: true
+        - binding: w1
+          name: Target weight, stock 1 (fraction)
+          show-custom-field: true
+        - binding: w2
+          name: Target weight, stock 2 (fraction)
+          show-custom-field: true
+        - binding: w3
+          name: Target weight, stock 3 (fraction)
+          show-custom-field: true
+        - binding: w4
+          name: Target weight, stock 4 (fraction)
+          show-custom-field: true
+        - binding: budget
+          name: Budget (USDC deposited)
+          show-custom-field: true
+        - binding: band
+          name: Rebalance band (fraction), e.g. 0.02
+          show-custom-field: true
+          default: 0.02
+        - binding: fee
+          name: Rebalancer fee (fraction), e.g. 0.003
+          show-custom-field: true
+          default: 0.003
+        - binding: oracle-price-timeout
+          name: Oracle price max age (seconds)
+          show-custom-field: true
+          default: 10800
+      select-tokens:
+        - key: usdc
+          name: USDC
+        - key: t1
+          name: Stock 1
+        - key: t2
+          name: Stock 2
+        - key: t3
+          name: Stock 3
+        - key: t4
+          name: Stock 4
+---
+#raindex-subparser !Raindex subparser.
+#dia-subparser !DiaWords subparser (dia-price).
+#erc4626-subparser !ERC4626 words (erc4626-convert-to-assets).
+#usdc !USDC address.
+#t1 !Stock token 1 (wt vault).
+#t2 !Stock token 2 (wt vault).
+#t3 !Stock token 3 (wt vault).
+#t4 !Stock token 4 (wt vault).
+#id1 !DIA feed id for stock 1.
+#id2 !DIA feed id for stock 2.
+#id3 !DIA feed id for stock 3.
+#id4 !DIA feed id for stock 4.
+#w1 !Target weight of stock 1.
+#w2 !Target weight of stock 2.
+#w3 !Target weight of stock 3.
+#w4 !Target weight of stock 4.
+#budget !USDC budget used to size the initial buys.
+#band !Drift above which a rebalance is offered.
+#fee !Discount to the oracle price paid to whoever rebalances.
+#oracle-price-timeout !Max oracle price age in seconds.
+
+#calculate-io
+using-words-from raindex-subparser dia-subparser erc4626-subparser
+d1 _: dia-price(id1 oracle-price-timeout),
+d2 _: dia-price(id2 oracle-price-timeout),
+d3 _: dia-price(id3 oracle-price-timeout),
+d4 _: dia-price(id4 oracle-price-timeout),
+p1: mul(d1 erc4626-convert-to-assets(t1 1)),
+p2: mul(d2 erc4626-convert-to-assets(t2 1)),
+p3: mul(d3 erc4626-convert-to-assets(t3 1)),
+p4: mul(d4 erc4626-convert-to-assets(t4 1)),
+out: output-token(),
+in: input-token(),
+p-out: if(equal-to(out usdc) 1 if(equal-to(out t1) p1 if(equal-to(out t2) p2 if(equal-to(out t3) p3 p4)))),
+p-in: if(equal-to(in usdc) 1 if(equal-to(in t1) p1 if(equal-to(in t2) p2 if(equal-to(in t3) p3 p4)))),
+w-out: if(equal-to(out usdc) 1 if(equal-to(out t1) w1 if(equal-to(out t2) w2 if(equal-to(out t3) w3 w4)))),
+w-in: if(equal-to(in usdc) 1 if(equal-to(in t1) w1 if(equal-to(in t2) w2 if(equal-to(in t3) w3 w4)))),
+value-out: mul(output-vault-before() p-out),
+value-in: mul(input-vault-before() p-in),
+v-out: div(value-out w-out),
+v-in: div(value-in w-in),
+fund-usd: max(sub(mul(w-in budget) value-in) 0),
+gap-usd: div(sub(v-out v-in) add(div(1 w-out) div(1 w-in))),
+rebalance-usd: if(greater-than(v-out mul(v-in add(1 band))) gap-usd 0),
+max-output: if(equal-to(in usdc) 0 if(equal-to(out usdc) fund-usd div(rebalance-usd p-out))),
+io: mul(div(p-out p-in) sub(1 fee));
+
+#handle-io
+:;
+
+#handle-add-order
+:;
