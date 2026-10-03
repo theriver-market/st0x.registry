@@ -14,7 +14,14 @@ def chain(sel, usdc_val, vals):
         out = f"if(equal-to({sel} t{i+1}) {vals[i]} {out})"
     return f"if(equal-to({sel} usdc) {usdc_val} {out})"
 
+def pick_src(n):
+    # Subroutine: pick the value for token `sel` (usdc -> u, tK -> vK). One copy of the
+    # if-chain instead of four keeps each source under the op limit for N >= 6.
+    args = ' '.join(['sel', 'u'] + [f'v{i}' for i in range(1, n + 1)])
+    return f"#pick\n{args}:,\n_: {chain('sel', 'u', [f'v{i}' for i in range(1, n + 1)])};\n"
+
 def gen(n):
+    sub = n >= 6  # 2..5 keep the fork-proven inline chains byte-for-byte
     ks = range(1, n + 1)
     toks = ['usdc'] + [f't{i}' for i in ks]
     io = '\n'.join(f'      - token: {t}' for t in toks)
@@ -44,6 +51,12 @@ def gen(n):
     prices = '\n'.join([f'd{i} _: dia-price(id{i} oracle-price-timeout),' for i in ks]
                        + [f'p{i}: mul(d{i} erc4626-convert-to-assets(t{i} 1)),' for i in ks])
     pv = [f'p{i}' for i in ks]; wv = [f'w{i}' for i in ks]
+    if sub:
+        sel_lines = '\n'.join(f"{nm}: call<'pick>({s_} 1 {' '.join(vs)})," for nm, s_, vs in
+                               [('p-out', 'out', pv), ('p-in', 'in', pv), ('w-out', 'out', wv), ('w-in', 'in', wv)])
+    else:
+        sel_lines = '\n'.join([f"p-out: {chain('out', '1', pv)},", f"p-in: {chain('in', '1', pv)},",
+                                f"w-out: {chain('out', '1', wv)},", f"w-in: {chain('in', '1', wv)},"])
     return f"""version: 6
 
 orders:
@@ -97,10 +110,7 @@ using-words-from raindex-subparser dia-subparser erc4626-subparser
 {prices}
 out: output-token(),
 in: input-token(),
-p-out: {chain('out', '1', pv)},
-p-in: {chain('in', '1', pv)},
-w-out: {chain('out', '1', wv)},
-w-in: {chain('in', '1', wv)},
+{sel_lines}
 value-out: mul(output-vault-before() p-out),
 value-in: mul(input-vault-before() p-in),
 v-out: div(value-out w-out),
@@ -121,10 +131,10 @@ io: if(equal-to(out usdc) fund-io rebalance-io);
 #handle-add-order
 using-words-from raindex-subparser
 :set(hash(order-hash() 1) now());
-"""
+""" + ('\n' + pick_src(n) if sub else '')
 
 root = pathlib.Path(__file__).resolve().parent.parent / 'src'
-# N=6 exceeds the per-source op limit (SourceTotalOpsOverflow, 3 Oct): 2..5 until the chains move into subroutines.
-for n in range(2, 6):
+# N=6 inline exceeded the per-source op limit (SourceTotalOpsOverflow, 3 Oct); N>=6 use the #pick subroutine.
+for n in range(2, 7):  # max = live DIA feeds (6 on 3 Oct)
     (root / f'river-basket-{n}.rain').write_text(gen(n))
     print('wrote', f'river-basket-{n}.rain')

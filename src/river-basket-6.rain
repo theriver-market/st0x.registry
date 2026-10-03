@@ -1,0 +1,212 @@
+version: 6
+
+orders:
+  base:
+    raindex: base
+    inputs:
+      - token: usdc
+      - token: t1
+      - token: t2
+      - token: t3
+      - token: t4
+      - token: t5
+      - token: t6
+    outputs:
+      - token: usdc
+      - token: t1
+      - token: t2
+      - token: t3
+      - token: t4
+      - token: t5
+      - token: t6
+
+scenarios:
+  river-basket-6-base:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      usdc: ${order.inputs.0.token.address}
+      t1: ${order.inputs.1.token.address}
+      t2: ${order.inputs.2.token.address}
+      t3: ${order.inputs.3.token.address}
+      t4: ${order.inputs.4.token.address}
+      t5: ${order.inputs.5.token.address}
+      t6: ${order.inputs.6.token.address}
+
+deployments:
+  base:
+    order: base
+    scenario: river-basket-6-base
+
+builder:
+  name: Portfolio (6 stocks)
+  description: >
+    Holds 6 stock tokens at your target weights and keeps them there. Your USDC deposit
+    buys each stock up to its share of the budget by Dutch auction around the onchain
+    oracle price; then any stock that drifts above its weight is offered for one below
+    its weight at oracle prices minus a small fee. Never sells into USDC.
+  short-description: Your own basket of 6 stocks, kept at your weights.
+  deployments:
+    base:
+      name: Base portfolio, 6 ST0x wt tokens
+      description: 6 ST0x wt stock tokens priced by DIA oracle x the vault's live ratio.
+      deposits:
+        - token: usdc
+      fields:
+        - binding: id1
+          name: DIA feed, stock 1
+          show-custom-field: true
+        - binding: id2
+          name: DIA feed, stock 2
+          show-custom-field: true
+        - binding: id3
+          name: DIA feed, stock 3
+          show-custom-field: true
+        - binding: id4
+          name: DIA feed, stock 4
+          show-custom-field: true
+        - binding: id5
+          name: DIA feed, stock 5
+          show-custom-field: true
+        - binding: id6
+          name: DIA feed, stock 6
+          show-custom-field: true
+        - binding: w1
+          name: Target weight, stock 1 (fraction)
+          show-custom-field: true
+        - binding: w2
+          name: Target weight, stock 2 (fraction)
+          show-custom-field: true
+        - binding: w3
+          name: Target weight, stock 3 (fraction)
+          show-custom-field: true
+        - binding: w4
+          name: Target weight, stock 4 (fraction)
+          show-custom-field: true
+        - binding: w5
+          name: Target weight, stock 5 (fraction)
+          show-custom-field: true
+        - binding: w6
+          name: Target weight, stock 6 (fraction)
+          show-custom-field: true
+        - binding: budget
+          name: Budget (USDC deposited)
+          show-custom-field: true
+        - binding: band
+          name: Rebalance band (fraction)
+          show-custom-field: true
+          default: 0.02
+        - binding: fee
+          name: Rebalancer fee (fraction)
+          show-custom-field: true
+          default: 0.003
+        - binding: oracle-price-timeout
+          name: Oracle price max age (seconds)
+          show-custom-field: true
+          default: 10800
+        - binding: auction-start
+          name: First-buy auction start (fraction of oracle)
+          show-custom-field: true
+          default: 0.99
+        - binding: auction-cap
+          name: First-buy auction cap (fraction of oracle)
+          show-custom-field: true
+          default: 1.005
+        - binding: auction-seconds
+          name: Auction rise time (seconds)
+          show-custom-field: true
+          default: 3600
+      select-tokens:
+        - key: usdc
+          name: USDC
+        - key: t1
+          name: Stock 1
+        - key: t2
+          name: Stock 2
+        - key: t3
+          name: Stock 3
+        - key: t4
+          name: Stock 4
+        - key: t5
+          name: Stock 5
+        - key: t6
+          name: Stock 6
+---
+#raindex-subparser !Raindex subparser.
+#dia-subparser !DiaWords subparser (dia-price).
+#erc4626-subparser !ERC4626 words (erc4626-convert-to-assets).
+#usdc !USDC address.
+#t1 !Stock token 1 (wt vault).
+#t2 !Stock token 2 (wt vault).
+#t3 !Stock token 3 (wt vault).
+#t4 !Stock token 4 (wt vault).
+#t5 !Stock token 5 (wt vault).
+#t6 !Stock token 6 (wt vault).
+#id1 !DIA feed id for stock 1.
+#id2 !DIA feed id for stock 2.
+#id3 !DIA feed id for stock 3.
+#id4 !DIA feed id for stock 4.
+#id5 !DIA feed id for stock 5.
+#id6 !DIA feed id for stock 6.
+#w1 !Target weight of stock 1.
+#w2 !Target weight of stock 2.
+#w3 !Target weight of stock 3.
+#w4 !Target weight of stock 4.
+#w5 !Target weight of stock 5.
+#w6 !Target weight of stock 6.
+#budget !USDC budget used to size the initial buys.
+#band !Drift above which a rebalance is offered.
+#fee !Discount to the oracle price paid to whoever rebalances.
+#oracle-price-timeout !Max oracle price age in seconds.
+#auction-start !Funding buys start at oracle x this.
+#auction-cap !Funding buys never pay above oracle x this.
+#auction-seconds !Seconds for the funding price to rise from start to cap.
+
+#calculate-io
+using-words-from raindex-subparser dia-subparser erc4626-subparser
+d1 _: dia-price(id1 oracle-price-timeout),
+d2 _: dia-price(id2 oracle-price-timeout),
+d3 _: dia-price(id3 oracle-price-timeout),
+d4 _: dia-price(id4 oracle-price-timeout),
+d5 _: dia-price(id5 oracle-price-timeout),
+d6 _: dia-price(id6 oracle-price-timeout),
+p1: mul(d1 erc4626-convert-to-assets(t1 1)),
+p2: mul(d2 erc4626-convert-to-assets(t2 1)),
+p3: mul(d3 erc4626-convert-to-assets(t3 1)),
+p4: mul(d4 erc4626-convert-to-assets(t4 1)),
+p5: mul(d5 erc4626-convert-to-assets(t5 1)),
+p6: mul(d6 erc4626-convert-to-assets(t6 1)),
+out: output-token(),
+in: input-token(),
+p-out: call<'pick>(out 1 p1 p2 p3 p4 p5 p6),
+p-in: call<'pick>(in 1 p1 p2 p3 p4 p5 p6),
+w-out: call<'pick>(out 1 w1 w2 w3 w4 w5 w6),
+w-in: call<'pick>(in 1 w1 w2 w3 w4 w5 w6),
+value-out: mul(output-vault-before() p-out),
+value-in: mul(input-vault-before() p-in),
+v-out: div(value-out w-out),
+v-in: div(value-in w-in),
+fund-usd: max(sub(mul(w-in budget) value-in) 0),
+gap-usd: div(sub(v-out v-in) add(div(1 w-out) div(1 w-in))),
+rebalance-usd: if(greater-than(v-out mul(v-in add(1 band))) gap-usd 0),
+elapsed: sub(now() get(hash(order-hash() 1))),
+auction: add(auction-start mul(sub(auction-cap auction-start) min(div(elapsed auction-seconds) 1))),
+fund-io: div(1 mul(p-in auction)),
+rebalance-io: mul(div(p-out p-in) sub(1 fee)),
+max-output: if(equal-to(in usdc) 0 if(equal-to(out usdc) fund-usd div(rebalance-usd p-out))),
+io: if(equal-to(out usdc) fund-io rebalance-io);
+
+#handle-io
+:set(hash(order-hash() 1) if(equal-to(output-token() usdc) now() get(hash(order-hash() 1))));
+
+#handle-add-order
+using-words-from raindex-subparser
+:set(hash(order-hash() 1) now());
+
+#pick
+sel u v1 v2 v3 v4 v5 v6:,
+_: if(equal-to(sel usdc) u if(equal-to(sel t1) v1 if(equal-to(sel t2) v2 if(equal-to(sel t3) v3 if(equal-to(sel t4) v4 if(equal-to(sel t5) v5 v6))))));
