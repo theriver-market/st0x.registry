@@ -1,0 +1,154 @@
+version: 6
+
+orders:
+  base:
+    raindex: base
+    inputs:
+      - token: input
+    outputs:
+      - token: output
+
+scenarios:
+  river-stop-buy-base:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      shares-per-token-fn: '''one-share'
+      wt-vault: ${order.inputs.0.token.address}
+  river-stop-buy-base-wt:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      shares-per-token-fn: '''wt-vault-assets'
+      wt-vault: ${order.inputs.0.token.address}
+
+deployments:
+  base:
+    order: base
+    scenario: river-stop-buy-base
+  base-wt:
+    order: base
+    scenario: river-stop-buy-base-wt
+
+builder:
+  name: Buy on breakout (stop-buy)
+  description: Buys a stock token with USDC once the DIA oracle price rises to your trigger, only while it is at or below your max price, never paying more than oracle price x your ceiling.
+  short-description: Buy when the oracle price rises to your trigger.
+  deployments:
+    base:
+      name: Base stop-buy
+      description: >
+        Spends the deposited USDC on the stock token once the onchain DIA price is at or
+        above the trigger and at or below the max price. Each fill pays at most
+        DIA price x ceiling per token. Inactive while the oracle price is stale.
+      deposits:
+        - token: output
+      fields:
+        - binding: dia-id
+          name: DIA price feed (stock ticker)
+          description: The DIA feed for the stock being bought, e.g. "NVDA".
+          show-custom-field: true
+        - binding: trigger-price
+          name: Trigger price (USD per share)
+          description: The order can only fill when the DIA price is at or above this.
+          show-custom-field: true
+        - binding: max-price
+          name: Max price (USD per share)
+          description: The order stops filling if the DIA price is above this.
+          show-custom-field: true
+        - binding: ceiling-multiplier
+          name: Ceiling (fraction of oracle price)
+          description: Maximum USDC paid per token as a fraction of the DIA price, e.g. 1.02.
+          show-custom-field: true
+          default: 1.02
+        - binding: oracle-price-timeout
+          name: Oracle price max age (seconds)
+          description: The order is inactive while the oracle price is older than this.
+          show-custom-field: true
+          default: 3600
+      select-tokens:
+        - key: input
+          name: Stock token to buy
+          description: The token bought when the trigger is hit.
+        - key: output
+          name: Pay with
+          description: The stablecoin you spend (USDC).
+    base-wt:
+      name: Base stop-buy (ST0x wt tokens)
+      description: >
+        Spends the deposited USDC on the stock token once the onchain DIA price is at or
+        above the trigger and at or below the max price. Each fill pays at most
+        DIA price x the vault's live shares-per-token x ceiling per token.
+        Inactive while the oracle price is stale.
+      deposits:
+        - token: output
+      fields:
+        - binding: dia-id
+          name: DIA price feed (stock ticker)
+          description: The DIA feed for the stock being bought, e.g. "NVDA".
+          show-custom-field: true
+        - binding: trigger-price
+          name: Trigger price (USD per share)
+          description: The order can only fill when the DIA price is at or above this.
+          show-custom-field: true
+        - binding: max-price
+          name: Max price (USD per share)
+          description: The order stops filling if the DIA price is above this.
+          show-custom-field: true
+        - binding: ceiling-multiplier
+          name: Ceiling (fraction of oracle price)
+          description: Maximum USDC paid per token as a fraction of the DIA price, e.g. 1.02.
+          show-custom-field: true
+          default: 1.02
+        - binding: oracle-price-timeout
+          name: Oracle price max age (seconds)
+          description: The order is inactive while the oracle price is older than this.
+          show-custom-field: true
+          default: 3600
+      select-tokens:
+        - key: input
+          name: Stock token to buy
+          description: The token bought when the trigger is hit.
+        - key: output
+          name: Pay with
+          description: The stablecoin you spend (USDC).
+---
+#raindex-subparser !Raindex subparser.
+#dia-subparser !DiaWords subparser (dia-price).
+#dia-id !The DIA feed id of the stock bought.
+#trigger-price !Fill only when the DIA price is at or above this (USD per share).
+#max-price !Fill only when the DIA price is at or below this (USD per share).
+#ceiling-multiplier !Maximum USDC per token as a fraction of the DIA price.
+#oracle-price-timeout !Max oracle price age in seconds.
+#erc4626-subparser !ERC4626 words (erc4626-convert-to-assets).
+#shares-per-token-fn !Underlying shares per token bought: 1, or the wt vault's live ratio.
+#wt-vault !The wt vault token bought (wt deployment only).
+
+#one-share
+_: 1;
+
+#wt-vault-assets
+_: erc4626-convert-to-assets(wt-vault 1);
+
+#calculate-io
+using-words-from raindex-subparser dia-subparser erc4626-subparser
+price _: dia-price(dia-id oracle-price-timeout),
+shares-per-token: call<'shares-per-token-fn>(),
+:ensure(greater-than-or-equal-to(price trigger-price) "Stop-buy not triggered"),
+:ensure(less-than-or-equal-to(price max-price) "Above max price"),
+max-output: max-positive-value(),
+io: div(1 mul(price shares-per-token ceiling-multiplier));
+
+#handle-io
+:;
+
+#handle-add-order
+:;
