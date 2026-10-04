@@ -78,7 +78,9 @@ local-db-sync:
     rate-limit-delay-ms: 5000
     finality-depth: 4
     bootstrap-block-threshold: 300
-    sync-interval-ms: 5000
+    # 4 Oct cost review: getLogs on the paid RPC dominate credits; 15 s still keeps order
+    # and trade lists fresh (quotes are live eth_calls either way).
+    sync-interval-ms: 15000
   robinhood:
     batch-size: 1250
     max-concurrent-batches: 1
