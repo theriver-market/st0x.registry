@@ -63,9 +63,14 @@ builder:
           show-custom-field: true
         - binding: spread
           name: Spread (fraction each side)
-          description: How far from the oracle price each side quotes, e.g. 0.01 = buy 1% below, sell 1% above.
+          description: How far from the oracle price each side quotes while US markets are open, e.g. 0.01 = buy 1% below, sell 1% above.
           show-custom-field: true
           default: 0.01
+        - binding: weekend-spread
+          name: Spread while US markets are shut (fraction each side)
+          description: The oracle holds the last US close at nights and weekends, so news can move the real price; a wider spread then earns more per trade and protects you, e.g. 0.03 = 3%.
+          show-custom-field: true
+          default: 0.03
         - binding: max-buy-price
           name: Max buy price (USD per share)
           description: Hard cap. Never buys above this per share, whatever the oracle says.
@@ -101,9 +106,14 @@ builder:
           show-custom-field: true
         - binding: spread
           name: Spread (fraction each side)
-          description: How far from the oracle price each side quotes, e.g. 0.01 = buy 1% below, sell 1% above.
+          description: How far from the oracle price each side quotes while US markets are open, e.g. 0.01 = buy 1% below, sell 1% above.
           show-custom-field: true
           default: 0.01
+        - binding: weekend-spread
+          name: Spread while US markets are shut (fraction each side)
+          description: The oracle holds the last US close at nights and weekends, so news can move the real price; a wider spread then earns more per trade and protects you, e.g. 0.03 = 3%.
+          show-custom-field: true
+          default: 0.03
         - binding: max-buy-price
           name: Max buy price (USD per share)
           description: Hard cap. Never buys above this per share, whatever the oracle says.
@@ -129,7 +139,8 @@ builder:
 #dia-subparser !DiaWords subparser (dia-price).
 #erc4626-subparser !ERC4626 words (erc4626-convert-to-assets).
 #dia-id !The DIA feed id of the stock.
-#spread !Fraction away from the oracle price that each side quotes.
+#spread !Fraction away from the oracle price that each side quotes while US markets are open.
+#weekend-spread !Fraction each side quotes while US markets are shut (nights, weekends).
 #max-buy-price !Hard cap on the buy price, USD per underlying share.
 #min-sell-price !Hard floor on the sell price, USD per underlying share.
 #oracle-price-timeout !Max oracle price age in seconds.
@@ -147,8 +158,14 @@ _: erc4626-convert-to-assets(wt-vault 1);
 using-words-from raindex-subparser dia-subparser erc4626-subparser
 price _: dia-price(dia-id oracle-price-timeout),
 shares-per-token: call<'shares-per-token-fn>(),
-ask-per-share: max(mul(price add(1 spread)) min-sell-price),
-bid-per-share: min(mul(price sub(1 spread)) max-buy-price),
+/* US regular hours, approximately: Mon-Fri 13:30-21:00 UTC (covers EDT and EST; holidays not
+   detected). Outside them DIA holds the last close, so the wider weekend spread applies. */
+day: mod(add(floor(div(now() 86400)) 4) 7),
+sec: mod(now() 86400),
+us-open: and(and(greater-than(day 0) less-than(day 6)) and(greater-than-or-equal-to(sec 48600) less-than(sec 75600))),
+s: if(us-open spread weekend-spread),
+ask-per-share: max(mul(price add(1 s)) min-sell-price),
+bid-per-share: min(mul(price sub(1 s)) max-buy-price),
 selling: equal-to(output-token() wt-vault),
 max-output: if(equal-to(input-token() output-token()) 0 max-positive-value()),
 io: if(selling
