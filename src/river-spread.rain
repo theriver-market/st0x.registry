@@ -1,0 +1,162 @@
+version: 6
+
+orders:
+  base:
+    raindex: base
+    inputs:
+      - token: usdc
+      - token: stock
+    outputs:
+      - token: usdc
+      - token: stock
+
+scenarios:
+  river-spread-base:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      shares-per-token-fn: '''one-share'
+      usdc: ${order.inputs.0.token.address}
+      wt-vault: ${order.inputs.1.token.address}
+  river-spread-base-wt:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      shares-per-token-fn: '''wt-vault-assets'
+      usdc: ${order.inputs.0.token.address}
+      wt-vault: ${order.inputs.1.token.address}
+
+deployments:
+  base:
+    order: base
+    scenario: river-spread-base
+  base-wt:
+    order: base
+    scenario: river-spread-base-wt
+
+builder:
+  name: Earn the spread
+  description: Quotes both sides of a stock token around its onchain DIA oracle price (the US price; held at the last close while US markets are shut). Buys below it and sells above it, again and again, so you earn the spread when other traders take your quotes, e.g. during weekend depegs.
+  short-description: Buy below the US price, sell above it, repeat.
+  deployments:
+    base:
+      name: Base spread
+      description: >
+        Sells the stock at max(DIA x (1 + spread), min sell price) and buys it at
+        min(DIA x (1 - spread), max buy price), per share. One vault per token, so what it
+        buys it can later sell and the other way round. Inactive while the oracle price is stale.
+      deposits:
+        - token: usdc
+        - token: stock
+      fields:
+        - binding: dia-id
+          name: DIA price feed (stock ticker)
+          description: The DIA feed for the stock, e.g. "NVDA".
+          show-custom-field: true
+        - binding: spread
+          name: Spread (fraction each side)
+          description: How far from the oracle price each side quotes, e.g. 0.01 = buy 1% below, sell 1% above.
+          show-custom-field: true
+          default: 0.01
+        - binding: max-buy-price
+          name: Max buy price (USD per share)
+          description: Hard cap. Never buys above this per share, whatever the oracle says.
+          show-custom-field: true
+        - binding: min-sell-price
+          name: Min sell price (USD per share)
+          description: Hard floor. Never sells below this per share, whatever the oracle says.
+          show-custom-field: true
+        - binding: oracle-price-timeout
+          name: Oracle price max age (seconds)
+          description: The order is inactive while the oracle price is older than this.
+          show-custom-field: true
+          default: 259200
+      select-tokens:
+        - key: usdc
+          name: Quote token
+          description: USDC.
+        - key: stock
+          name: Stock token
+          description: The stock token to quote around its US price.
+    base-wt:
+      name: Base spread (ST0x wt tokens)
+      description: >
+        As the base spread, priced per underlying share through the wt vault's live
+        shares-per-token. Inactive while the oracle price is stale.
+      deposits:
+        - token: usdc
+        - token: stock
+      fields:
+        - binding: dia-id
+          name: DIA price feed (stock ticker)
+          description: The DIA feed for the stock, e.g. "NVDA".
+          show-custom-field: true
+        - binding: spread
+          name: Spread (fraction each side)
+          description: How far from the oracle price each side quotes, e.g. 0.01 = buy 1% below, sell 1% above.
+          show-custom-field: true
+          default: 0.01
+        - binding: max-buy-price
+          name: Max buy price (USD per share)
+          description: Hard cap. Never buys above this per share, whatever the oracle says.
+          show-custom-field: true
+        - binding: min-sell-price
+          name: Min sell price (USD per share)
+          description: Hard floor. Never sells below this per share, whatever the oracle says.
+          show-custom-field: true
+        - binding: oracle-price-timeout
+          name: Oracle price max age (seconds)
+          description: The order is inactive while the oracle price is older than this.
+          show-custom-field: true
+          default: 259200
+      select-tokens:
+        - key: usdc
+          name: Quote token
+          description: USDC.
+        - key: stock
+          name: Stock token
+          description: The stock token to quote around its US price.
+---
+#raindex-subparser !Raindex subparser.
+#dia-subparser !DiaWords subparser (dia-price).
+#erc4626-subparser !ERC4626 words (erc4626-convert-to-assets).
+#dia-id !The DIA feed id of the stock.
+#spread !Fraction away from the oracle price that each side quotes.
+#max-buy-price !Hard cap on the buy price, USD per underlying share.
+#min-sell-price !Hard floor on the sell price, USD per underlying share.
+#oracle-price-timeout !Max oracle price age in seconds.
+#shares-per-token-fn !Underlying shares per token: 1, or the wt vault's live ratio.
+#usdc !The USDC token address (input/output 0).
+#wt-vault !The stock token address (input/output 1).
+
+#one-share
+_: 1;
+
+#wt-vault-assets
+_: erc4626-convert-to-assets(wt-vault 1);
+
+#calculate-io
+using-words-from raindex-subparser dia-subparser erc4626-subparser
+price _: dia-price(dia-id oracle-price-timeout),
+shares-per-token: call<'shares-per-token-fn>(),
+ask-per-share: max(mul(price add(1 spread)) min-sell-price),
+bid-per-share: min(mul(price sub(1 spread)) max-buy-price),
+selling: equal-to(output-token() wt-vault),
+max-output: if(equal-to(input-token() output-token()) 0 max-positive-value()),
+io: if(selling
+  mul(ask-per-share shares-per-token)
+  inv(mul(bid-per-share shares-per-token)));
+
+#handle-io
+:;
+
+#handle-add-order
+:;
