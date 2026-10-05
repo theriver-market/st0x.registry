@@ -93,10 +93,10 @@ local-db-sync:
 using-tokens-from:
   - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/57a898cff8d964b5721e0d7d284ee9d501bb28d8/token-lists/base.json
   - https://raw.githubusercontent.com/theriver-market/st0x.registry/7efc6a5ccaf88c8734b888f5e7a23997d2ffa9e7/token-lists/river-base.json
-  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/d2acd5fababdf8e63bc3d9f1d6b19b5431279b4b/token-lists/base-quotes.json
-  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/d2acd5fababdf8e63bc3d9f1d6b19b5431279b4b/token-lists/ethereum.json
-  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/d2acd5fababdf8e63bc3d9f1d6b19b5431279b4b/token-lists/ethereum-quotes.json
-  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/d2acd5fababdf8e63bc3d9f1d6b19b5431279b4b/token-lists/hyperevm.json
-  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/d2acd5fababdf8e63bc3d9f1d6b19b5431279b4b/token-lists/hyperevm-quotes.json
-  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/b38a90a0007df94ce9a716564b7cafb413c5e6af/token-lists/robinhood.json
-  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/b38a90a0007df94ce9a716564b7cafb413c5e6af/token-lists/robinhood-quotes.json
+  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/57a898cff8d964b5721e0d7d284ee9d501bb28d8/token-lists/base-quotes.json
+  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/57a898cff8d964b5721e0d7d284ee9d501bb28d8/token-lists/ethereum.json
+  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/57a898cff8d964b5721e0d7d284ee9d501bb28d8/token-lists/ethereum-quotes.json
+  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/57a898cff8d964b5721e0d7d284ee9d501bb28d8/token-lists/hyperevm.json
+  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/57a898cff8d964b5721e0d7d284ee9d501bb28d8/token-lists/hyperevm-quotes.json
+  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/57a898cff8d964b5721e0d7d284ee9d501bb28d8/token-lists/robinhood.json
+  - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/57a898cff8d964b5721e0d7d284ee9d501bb28d8/token-lists/robinhood-quotes.json
