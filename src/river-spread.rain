@@ -159,9 +159,11 @@ using-words-from raindex-subparser dia-subparser erc4626-subparser
 price _: dia-price(dia-id oracle-price-timeout),
 shares-per-token: call<'shares-per-token-fn>(),
 /* US regular hours, approximately: Mon-Fri 13:30-21:00 UTC (covers EDT and EST; holidays not
-   detected). Outside them DIA holds the last close, so the wider weekend spread applies. */
-day: mod(add(floor(div(now() 86400)) 4) 7),
-sec: mod(now() 86400),
+   detected). day: 0 = Sunday (1 Jan 1970 was a Thursday). Outside them DIA holds the last close, so the wider weekend spread applies. */
+days: floor(div(now() 86400)),
+d4: add(days 4),
+day: sub(d4 mul(7 floor(div(d4 7)))),
+sec: sub(now() mul(86400 days)),
 us-open: and(and(greater-than(day 0) less-than(day 6)) and(greater-than-or-equal-to(sec 48600) less-than(sec 75600))),
 s: if(us-open spread weekend-spread),
 ask-per-share: max(mul(price add(1 s)) min-sell-price),
