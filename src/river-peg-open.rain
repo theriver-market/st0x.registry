@@ -1,0 +1,172 @@
+version: 6
+
+orders:
+  base:
+    raindex: base
+    inputs:
+      - token: input
+    outputs:
+      - token: output
+
+scenarios:
+  river-peg-open-base:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      shares-per-token-fn: '''one-share'
+      wt-vault: ${order.inputs.0.token.address}
+  river-peg-open-base-wt:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      shares-per-token-fn: '''wt-vault-assets'
+      wt-vault: ${order.inputs.0.token.address}
+
+deployments:
+  base:
+    order: base
+    scenario: river-peg-open-base
+  base-wt:
+    order: base
+    scenario: river-peg-open-base-wt
+
+builder:
+  name: Buy at the open
+  description: Buys a stock token with USDC at the first DIA price after the next US market open x your peg (up to 0.3% above), never above your max price. Never fills before the open, on the close price, or after the open window.
+  short-description: Buy at the US open price, not tonight's.
+  deployments:
+    base:
+      name: Base pegged buy
+      description: >
+        Pays min(DIA price x peg, max price) per share, only from open-ts to open-ts + open-window, only on a DIA post signed at or after open-ts whose value differs from the close baked into the order.
+      deposits:
+        - token: output
+      fields:
+        - binding: dia-id
+          name: DIA price feed (stock ticker)
+          description: The DIA feed for the stock being bought, e.g. "NVDA".
+          show-custom-field: true
+        - binding: peg-multiplier
+          name: Peg (fraction of oracle price)
+          description: Price paid per share as a fraction of the DIA price, e.g. 1.003 = up to 0.3% above, 0.997 = 0.3% below.
+          show-custom-field: true
+          default: 1.003
+        - binding: max-price
+          name: Max price (USD per share)
+          description: Hard cap. The order never pays more than this per share, whatever the oracle says.
+          show-custom-field: true
+        - binding: oracle-price-timeout
+          name: Oracle price max age (seconds)
+          description: The order is inactive while the oracle price is older than this.
+          show-custom-field: true
+          default: 10800
+        - binding: open-ts
+          name: Market open (unix seconds)
+          description: The US regular-session open the order waits for (set by the site from the NYSE calendar).
+          show-custom-field: true
+        - binding: open-window
+          name: Open window (seconds)
+          description: The order fills only until this long after the open, then refuses.
+          show-custom-field: true
+          default: 1800
+        - binding: close-price
+          name: Close price baked in (USD per share)
+          description: The DIA price when the order was placed. The order refuses while DIA still shows this value.
+          show-custom-field: true
+      select-tokens:
+        - key: input
+          name: Stock token to buy
+          description: The token the order buys.
+        - key: output
+          name: Pay with
+          description: The stablecoin you deposit (USDC).
+    base-wt:
+      name: Base pegged buy (ST0x wt tokens)
+      description: >
+        Pays min(DIA price x peg, max price) per underlying share, priced through the wt vault's live shares-per-token, only from open-ts to open-ts + open-window, only on a DIA post signed at or after open-ts whose value differs from the close baked into the order.
+      deposits:
+        - token: output
+      fields:
+        - binding: dia-id
+          name: DIA price feed (stock ticker)
+          description: The DIA feed for the stock being bought, e.g. "NVDA".
+          show-custom-field: true
+        - binding: peg-multiplier
+          name: Peg (fraction of oracle price)
+          description: Price paid per share as a fraction of the DIA price, e.g. 1.003 = up to 0.3% above, 0.997 = 0.3% below.
+          show-custom-field: true
+          default: 1.003
+        - binding: max-price
+          name: Max price (USD per share)
+          description: Hard cap. The order never pays more than this per share, whatever the oracle says.
+          show-custom-field: true
+        - binding: oracle-price-timeout
+          name: Oracle price max age (seconds)
+          description: The order is inactive while the oracle price is older than this.
+          show-custom-field: true
+          default: 10800
+        - binding: open-ts
+          name: Market open (unix seconds)
+          description: The US regular-session open the order waits for (set by the site from the NYSE calendar).
+          show-custom-field: true
+        - binding: open-window
+          name: Open window (seconds)
+          description: The order fills only until this long after the open, then refuses.
+          show-custom-field: true
+          default: 1800
+        - binding: close-price
+          name: Close price baked in (USD per share)
+          description: The DIA price when the order was placed. The order refuses while DIA still shows this value.
+          show-custom-field: true
+      select-tokens:
+        - key: input
+          name: Stock token to buy
+          description: The token the order buys.
+        - key: output
+          name: Pay with
+          description: The stablecoin you deposit (USDC).
+---
+#raindex-subparser !Raindex subparser.
+#dia-subparser !DiaWords subparser (dia-price).
+#dia-id !The DIA feed id of the stock bought.
+#peg-multiplier !USD paid per share as a fraction of the DIA price.
+#max-price !Hard cap in USD per underlying share.
+#oracle-price-timeout !Max oracle price age in seconds (dead-feed guard).
+#open-ts !Next NYSE regular open, unix seconds (site calendar).
+#open-window !Seconds after open-ts during which the order may fill.
+#close-price !DIA price baked in at placement; the order refuses while DIA still shows it.
+#erc4626-subparser !ERC4626 words (erc4626-convert-to-assets).
+#shares-per-token-fn !Underlying shares per token bought: 1, or the wt vault's live ratio.
+#wt-vault !The wt vault token bought (wt deployment only).
+
+#one-share
+_: 1;
+
+#wt-vault-assets
+_: erc4626-convert-to-assets(wt-vault 1);
+
+#calculate-io
+using-words-from raindex-subparser dia-subparser erc4626-subparser
+price updated-at: dia-price(dia-id oracle-price-timeout),
+:ensure(greater-than-or-equal-to(now() open-ts) "Before the open"),
+:ensure(less-than-or-equal-to(now() add(open-ts open-window)) "Open window over"),
+:ensure(greater-than-or-equal-to(updated-at open-ts) "No oracle post since the open"),
+:ensure(if(equal-to(price close-price) 0 1) "Oracle still at the close"),
+shares-per-token: call<'shares-per-token-fn>(),
+per-share: min(mul(price peg-multiplier) max-price),
+max-output: max-positive-value(),
+io: inv(mul(per-share shares-per-token));
+
+#handle-io
+:;
+
+#handle-add-order
+:;
