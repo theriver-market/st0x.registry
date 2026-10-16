@@ -1,9 +1,9 @@
 {
   "name": "ST0x Robinhood Chain Token List",
-  "timestamp": "2026-09-29T00:00:00.000Z",
+  "timestamp": "2026-10-16T00:00:00.000Z",
   "version": {
     "major": 1,
-    "minor": 2,
+    "minor": 3,
     "patch": 0
   },
   "keywords": [
@@ -1100,6 +1100,63 @@
         "category": "ST0x",
         "tradingViewSymbol": "AMEX:SPY",
         "isin": "US78462F1030",
+        "tradingViewMarket": "america"
+      }
+    },
+    {
+      "chainId": 4663,
+      "address": "0x06096908dBC38fc54509024674E4fd1891B5F7CA",
+      "decimals": 18,
+      "name": "Wrapped SenesTech, Inc. ST0x",
+      "symbol": "wtSNES",
+      "logoURI": "https://st0x.io/images/SNES.png",
+      "tags": [
+        "st0x"
+      ],
+      "extensions": {
+        "unwrappedAddress": "0xf8bf43d61e4cd2a5b5dfad01bac84693d7b95e51",
+        "receiptAddress": "0x4ed13d2c1f545fa73f53be8c0bb82d279738c10f",
+        "category": "ST0x",
+        "tradingViewSymbol": "NASDAQ:SNES",
+        "isin": "US81720R6045",
+        "tradingViewMarket": "america"
+      }
+    },
+    {
+      "chainId": 4663,
+      "address": "0x23A0944e82766242dA76cb0f77e0b7812e5487EA",
+      "decimals": 18,
+      "name": "Wrapped Walmart Inc. ST0x",
+      "symbol": "wtWMT",
+      "logoURI": "https://st0x.io/images/WMT.png",
+      "tags": [
+        "st0x"
+      ],
+      "extensions": {
+        "unwrappedAddress": "0xfae9afe275e57759f8fbae5f252c65adbf1b773f",
+        "receiptAddress": "0x395717ee8201419b21b40a400ea959a7d7d43a36",
+        "category": "ST0x",
+        "tradingViewSymbol": "NASDAQ:WMT",
+        "isin": "US9311421039",
+        "tradingViewMarket": "america"
+      }
+    },
+    {
+      "chainId": 4663,
+      "address": "0x81f40cbCFAE7A1aD1f4474eD95A210DfA3B90B0f",
+      "decimals": 18,
+      "name": "Wrapped The Walt Disney Company ST0x",
+      "symbol": "wtDIS",
+      "logoURI": "https://st0x.io/images/DIS.png",
+      "tags": [
+        "st0x"
+      ],
+      "extensions": {
+        "unwrappedAddress": "0xd78025aa344e549a1d76ece1591c481cc7bc3548",
+        "receiptAddress": "0x29e7fe750dfffd4d7c8e907c126324b8a5a9adb7",
+        "category": "ST0x",
+        "tradingViewSymbol": "NYSE:DIS",
+        "isin": "US2546871060",
         "tradingViewMarket": "america"
       }
     }
