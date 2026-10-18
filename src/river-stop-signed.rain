@@ -1,0 +1,137 @@
+version: 6
+
+# river-stop-signed: river-stop priced by The River's own signed price frame
+# (~/ops/research/OWN-ORACLE.md, build record OWN-ORACLE-V1-BUILD.md). STAGING ONLY:
+# binds the staging EOA signer (v1, single key on the staging host) and the
+# staging price service. Not for prod: prod waits for the RiverPriceSigner
+# (ERC-1271, 2-of-2); only the binding changes then (signer<0>() = the contract
+# address) and the Rainlang below stays as is.
+# Fork proof: site repo scripts/own-oracle/run.sh (StopSigned.fork.t.sol), 11/11.
+
+orders:
+  base:
+    raindex: base
+    oracle-url: https://staging.theriver.markets/oracle/v1/price
+    inputs:
+      - token: input
+    outputs:
+      - token: output
+
+scenarios:
+  river-stop-signed-base-wt:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      oracle-signer: 0x09Fdc9B00cC0323F24a9a14002958AB9b00CFe73
+      oracle-schema-version: 1
+      expected-chain-id: 8453
+      shares-per-token-fn: '''wt-vault-assets'
+      wt-vault: ${order.outputs.0.token.address}
+
+deployments:
+  base-wt:
+    order: base
+    scenario: river-stop-signed-base-wt
+
+builder:
+  name: Stop-loss (River price)
+  description: Sells a stock token for USDC once The River's signed price is at or below your trigger, never below your own $ per share floor.
+  short-description: Sell when the price falls to your trigger.
+  deployments:
+    base-wt:
+      name: Base stop-loss on The River's signed price (ST0x wt tokens)
+      description: >
+        Sells the deposited wt stock token for USDC once a fresh price signed
+        by The River is at or below the trigger. Each fill pays at least
+        price x the vault's live shares-per-token x floor per token, and never
+        less than your absolute floor per share. No fresh signed price, no fill.
+      deposits:
+        - token: output
+      fields:
+        - binding: trigger-price
+          name: Trigger price (USD per share)
+          description: The order can only fill when the signed price is at or below this.
+          show-custom-field: true
+        - binding: floor-multiplier
+          name: Floor (fraction of signed price)
+          description: Minimum accepted USDC per share as a fraction of the signed price, e.g. 0.98.
+          show-custom-field: true
+          default: 0.98
+        - binding: abs-floor
+          name: Absolute floor (USD per share)
+          description: Never sell below this many USD per share, whatever price is signed.
+          show-custom-field: true
+        - binding: max-age
+          name: Price max age (seconds)
+          description: The order is inactive while the signed source price is older than this.
+          show-custom-field: true
+          default: 120
+        - binding: off-hours-ok
+          name: May fire on the off-hours estimate (1 = yes, 0 = no)
+          description: Basis 2 frames (overnight/weekend estimate) fill only if this is 1.
+          show-custom-field: true
+          default: 0
+      select-tokens:
+        - key: output
+          name: Stock token to sell
+          description: The wt token sold when the stop triggers.
+        - key: input
+          name: Receive
+          description: The stablecoin you receive (USDC).
+---
+#raindex-subparser !Raindex subparser.
+#erc4626-subparser !ERC4626 words (erc4626-convert-to-assets).
+#oracle-signer !The River's price signer (EOA for the proof; RiverPriceSigner ERC-1271 later).
+#oracle-schema-version !Expected frame schema version (1).
+#expected-chain-id !Chain id signed at slot 5.
+#trigger-price !Fill only when the signed price is at or below this (USD per share).
+#floor-multiplier !Minimum USDC per share as a fraction of the signed price.
+#abs-floor !Absolute minimum USD per share, signed by the user.
+#max-age !Max age of the signed source price in seconds.
+#off-hours-ok !1 if the order may fire on a basis 2 (off-hours estimate) frame.
+#shares-per-token-fn !Underlying shares per token sold.
+#wt-vault !The wt vault token sold.
+
+#wt-vault-assets
+_: erc4626-convert-to-assets(wt-vault 1);
+
+/* Signed frame, column 0:
+ * 0 schema version, 1 price per share (USD, Float), 2 source publish time,
+ * 3 basis (1 = US session last sale, 2 = off-hours estimate), 4 expiry,
+ * 5 chain id, 6 order hash, 7 stock token, 8 counterparty.
+ * No signed context at all: signer<0>() is out of bounds and reverts. */
+#calculate-io
+using-words-from raindex-subparser erc4626-subparser
+:ensure(equal-to(signer<0>() oracle-signer) "Untrusted price signer"),
+:ensure(equal-to(signed-context<0 0>() oracle-schema-version) "Price schema mismatch"),
+price: signed-context<0 1>(),
+publish-time: signed-context<0 2>(),
+basis: signed-context<0 3>(),
+expiry: signed-context<0 4>(),
+:ensure(equal-to(signed-context<0 5>() expected-chain-id) "Wrong chain"),
+:ensure(equal-to(signed-context<0 6>() order-hash()) "Price frame for another order"),
+:ensure(equal-to(signed-context<0 7>() output-token()) "Price frame for another token"),
+:ensure(equal-to(signed-context<0 8>() order-counterparty()) "Price frame for another taker"),
+:ensure(greater-than(price 0) "Zero price"),
+:ensure(less-than-or-equal-to(publish-time now()) "Price from the future"),
+:ensure(less-than-or-equal-to(sub(now() publish-time) max-age) "Price too old"),
+:ensure(less-than-or-equal-to(now() expiry) "Price frame expired"),
+:ensure(
+  any(equal-to(basis 1) every(equal-to(basis 2) off-hours-ok))
+  "Off-hours price not allowed"
+),
+:ensure(less-than-or-equal-to(price trigger-price) "Stop not triggered"),
+sell-price: mul(price floor-multiplier),
+:ensure(greater-than-or-equal-to(sell-price abs-floor) "Below your floor"),
+shares-per-token: call<'shares-per-token-fn>(),
+max-output: max-positive-value(),
+io: mul(sell-price shares-per-token);
+
+#handle-io
+:;
+
+#handle-add-order
+:;
