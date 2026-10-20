@@ -63,11 +63,14 @@ builder:
           name: Premium (multiple of ST0x's signed price)
           description: >
             Price paid per share as a multiple of ST0x's signed buy price,
-            e.g. 1.004 = 0.4% above it. ST0x's signed buy price already sits
-            below the market price by their spread, so a small premium can
-            still be below what the order book charges.
+            e.g. 1.008 = 0.8% above it. ST0x's signed buy price sits below
+            the mid by their half-spread (0.3714% on wtNVDA, measured 20 Oct
+            pre-market and regular hours), so 1.008 pays about ST0x's sell
+            price + 0.05%: enough for any solver to fill from ST0x's own sell
+            order, and below the same buy through the site (ask + 0.10% fee).
+            The site sets this from the live bid/ask when the order is placed.
           show-custom-field: true
-          default: 1.004
+          default: 1.008
         - binding: max-price
           name: Max price (USD per share)
           description: Hard cap. The order never pays more than this per share, whatever ST0x signs.
