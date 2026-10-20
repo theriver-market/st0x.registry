@@ -1,0 +1,141 @@
+version: 6
+
+# river-peg-st0x ("oracle-taker" buy): a standing Raindex order that buys an
+# ST0x wt stock token with USDC at the ST0x oracle's signed price x your
+# premium, never above your own max price per share. Takers fetch the signed
+# frame from ST0x's oracle-url (the Raindex SDK does this for any order whose
+# meta carries it), so ST0x's solver can keep filling it as inventory arrives.
+#
+# Price semantics (measured 20 Oct, ~/ops/research/ORACLE-TAKER.md): the
+# /context/v7 frame for this pair (input = wt token, output = USDC) carries
+# ST0x's BUY-side quote, spread included: slot 1 = underlying shares per USDC
+# = 1 / (oracle mid x (1 - half spread)). So "signed price" below is ST0x's
+# bid, and the premium is over that bid, not over the mid.
+#
+# DRAFT: not in the manifest until fork-proven (river-contracts
+# test/strategies/PegSt0x.fork.t.sol).
+
+orders:
+  base:
+    raindex: base
+    oracle-url: https://oracle.t0trade.com/context/v7
+    inputs:
+      - token: input
+    outputs:
+      - token: output
+
+scenarios:
+  river-peg-st0x-base-wt:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      oracle-signer: 0xdB665B5ef8Bd04Fd977bB3A64790eaa52749ACcc
+      oracle-schema-version: 7
+      expected-chain-id: 8453
+      shares-per-token-fn: '''wt-vault-assets'
+      wt-vault: ${order.inputs.0.token.address}
+
+deployments:
+  base-wt:
+    order: base
+    scenario: river-peg-st0x-base-wt
+
+builder:
+  name: Oracle buy (ST0x price)
+  description: Buys an ST0x stock token with USDC at ST0x's own signed price plus a small premium, never above your max price. Stays open so ST0x can fill it whenever they have stock.
+  short-description: Standing buy at ST0x's price plus a premium.
+  deployments:
+    base-wt:
+      name: Base oracle buy on ST0x's signed price (ST0x wt tokens)
+      description: >
+        Pays ST0x's signed buy price x your premium per share, priced per
+        token through the wt vault's live shares-per-token. Never pays more
+        than your max price per share. Fills only while ST0x's oracle serves a
+        fresh price in a US market session (pre-market, regular, after-hours);
+        no fresh signed price, no fill.
+      deposits:
+        - token: output
+      fields:
+        - binding: peg-multiplier
+          name: Premium (multiple of ST0x's signed price)
+          description: >
+            Price paid per share as a multiple of ST0x's signed buy price,
+            e.g. 1.004 = 0.4% above it. ST0x's signed buy price already sits
+            below the market price by their spread, so a small premium can
+            still be below what the order book charges.
+          show-custom-field: true
+          default: 1.004
+        - binding: max-price
+          name: Max price (USD per share)
+          description: Hard cap. The order never pays more than this per share, whatever ST0x signs.
+          show-custom-field: true
+      select-tokens:
+        - key: input
+          name: Stock token to buy
+          description: The ST0x wt token the order buys (e.g. wtNVDA).
+        - key: output
+          name: Pay with
+          description: The USDC you deposit.
+---
+#raindex-subparser !Raindex subparser.
+#erc4626-subparser !ERC4626 words (erc4626-convert-to-assets).
+#oracle-signer !ST0x's oracle signer (as in st0x-fixed-spread-v7).
+#oracle-schema-version !Expected frame schema version (7).
+#expected-chain-id !Chain id the oracle signs at slot 9.
+#peg-multiplier !USD paid per share as a multiple of the signed price (>= 1 = premium).
+#max-price !Hard cap in USD per underlying share.
+#shares-per-token-fn !Underlying shares per wt token (the vault's live ratio).
+#wt-vault !The wt vault token bought.
+
+#wt-vault-assets
+_: erc4626-convert-to-assets(wt-vault 1);
+
+/* ST0x /context/v7 frame, column 0 (st0x-fixed-spread-v7.md):
+ * 0 schema version, 1 underlying price (directional, spread included, ratio
+ * units: here underlying shares per USDC), 2 publish time, 3 session tag,
+ * 4 session start, 5 session end, 6 input token, 7 output token,
+ * 8 absolute expiry, 9 chain id. Every v7 guard is kept.
+ * No signed context at all: signer<0>() is out of bounds and reverts. */
+#calculate-io
+using-words-from raindex-subparser erc4626-subparser
+:ensure(equal-to(signer<0>() oracle-signer) "Untrusted oracle signer"),
+:ensure(equal-to(signed-context<0 0>() oracle-schema-version) "Oracle schema version mismatch"),
+:ensure(equal-to(signed-context<0 9>() expected-chain-id) "Wrong chain"),
+signed-ratio: signed-context<0 1>(),
+publish-time: signed-context<0 2>(),
+session: signed-context<0 3>(),
+session-start: signed-context<0 4>(),
+session-end: signed-context<0 5>(),
+expiry: signed-context<0 8>(),
+:ensure(equal-to(signed-context<0 6>() input-token()) "Oracle input token mismatch"),
+:ensure(equal-to(signed-context<0 7>() output-token()) "Oracle output token mismatch"),
+:ensure(
+  any(
+    equal-to(session "rth")
+    equal-to(session "premarket")
+    equal-to(session "afterhours")
+  )
+  "Not in active market session"
+),
+:ensure(greater-than-or-equal-to(now() session-start) "Before session start"),
+:ensure(less-than-or-equal-to(now() session-end) "After session end"),
+:ensure(greater-than-or-equal-to(publish-time session-start) "Price before session start"),
+:ensure(less-than-or-equal-to(publish-time now()) "Price from the future"),
+:ensure(less-than-or-equal-to(now() expiry) "Past oracle expiry"),
+:ensure(greater-than(signed-ratio 0) "Zero price"),
+/* USD per underlying share, as ST0x signed it for this direction. */
+signed-price: inv(signed-ratio),
+per-share: mul(signed-price peg-multiplier),
+:ensure(less-than-or-equal-to(per-share max-price) "Above your max price"),
+shares-per-token: call<'shares-per-token-fn>(),
+max-output: max-positive-value(),
+io: inv(mul(per-share shares-per-token));
+
+#handle-io
+:;
+
+#handle-add-order
+:;
