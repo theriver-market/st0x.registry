@@ -1,0 +1,174 @@
+version: 6
+
+orders:
+  base:
+    raindex: base
+    inputs:
+      - token: input
+    outputs:
+      - token: output
+
+scenarios:
+  river-peg-hours-base:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      shares-per-token-fn: '''one-share'
+      wt-vault: ${order.inputs.0.token.address}
+  river-peg-hours-base-wt:
+    raindex: base
+    rainlang: base
+    runs: 1
+    bindings:
+      raindex-subparser: 0x22839F16281E67E5Fd395fAFd1571e820CbD46cB
+      dia-subparser: 0xDf96DF297C963622C523F6d59e90b4C28CF61C21
+      erc4626-subparser: 0xd69dC3d58a7C875117f9c7cecF4F1A7f3CA47254
+      shares-per-token-fn: '''wt-vault-assets'
+      wt-vault: ${order.inputs.0.token.address}
+
+deployments:
+  base:
+    order: base
+    scenario: river-peg-hours-base
+  base-wt:
+    order: base
+    scenario: river-peg-hours-base-wt
+
+builder:
+  name: Pegged buy (US market hours)
+  description: Buys a stock token with USDC at the onchain DIA oracle price x your peg (e.g. 0.3% below), never above your max price. Fills only during the NYSE regular session (9:30 am-4 pm New York, weekdays, 1 pm on early-close days, never on NYSE holidays) and only on a DIA post signed since that session's open, so it never fills at a close DIA re-stamps overnight, at weekends or on holidays.
+  short-description: Buy below the oracle price, automatically, only while the US market is open.
+  deployments:
+    base:
+      name: Base pegged buy, US market hours
+      description: >
+        Pays min(DIA price x peg, max price) per share for the token, only during NYSE regular hours (2026-2027 calendar) and only on a DIA post signed since that session's open. Inactive while the oracle price is stale.
+      deposits:
+        - token: output
+      fields:
+        - binding: dia-id
+          name: DIA price feed (stock ticker)
+          description: The DIA feed for the stock being bought, e.g. "NVDA".
+          show-custom-field: true
+        - binding: peg-multiplier
+          name: Peg (fraction of oracle price)
+          description: Price paid per share as a fraction of the DIA price, e.g. 0.997 = 0.3% below.
+          show-custom-field: true
+          default: 0.997
+        - binding: max-price
+          name: Max price (USD per share)
+          description: Hard cap. The order never pays more than this per share, whatever the oracle says.
+          show-custom-field: true
+        - binding: oracle-price-timeout
+          name: Oracle price max age (seconds)
+          description: The order is inactive while the oracle price is older than this.
+          show-custom-field: true
+          default: 21600
+      select-tokens:
+        - key: input
+          name: Stock token to buy
+          description: The token the order buys.
+        - key: output
+          name: Pay with
+          description: The stablecoin you deposit (USDC).
+    base-wt:
+      name: Base pegged buy, US market hours (ST0x wt tokens)
+      description: >
+        Pays min(DIA price x peg, max price) per underlying share, priced through the wt vault's live shares-per-token, only during NYSE regular hours (2026-2027 calendar) and only on a DIA post signed since that session's open. Inactive while the oracle price is stale.
+      deposits:
+        - token: output
+      fields:
+        - binding: dia-id
+          name: DIA price feed (stock ticker)
+          description: The DIA feed for the stock being bought, e.g. "NVDA".
+          show-custom-field: true
+        - binding: peg-multiplier
+          name: Peg (fraction of oracle price)
+          description: Price paid per share as a fraction of the DIA price, e.g. 0.997 = 0.3% below.
+          show-custom-field: true
+          default: 0.997
+        - binding: max-price
+          name: Max price (USD per share)
+          description: Hard cap. The order never pays more than this per share, whatever the oracle says.
+          show-custom-field: true
+        - binding: oracle-price-timeout
+          name: Oracle price max age (seconds)
+          description: The order is inactive while the oracle price is older than this.
+          show-custom-field: true
+          default: 21600
+      select-tokens:
+        - key: input
+          name: Stock token to buy
+          description: The token the order buys.
+        - key: output
+          name: Pay with
+          description: The stablecoin you deposit (USDC).
+---
+#raindex-subparser !Raindex subparser.
+#dia-subparser !DiaWords subparser (dia-price).
+#dia-id !The DIA feed id of the stock bought.
+#peg-multiplier !USD paid per share as a fraction of the DIA price.
+#max-price !Hard cap in USD per underlying share.
+#oracle-price-timeout !Max oracle price age in seconds.
+#erc4626-subparser !ERC4626 words (erc4626-convert-to-assets).
+#shares-per-token-fn !Underlying shares per token bought: 1, or the wt vault's live ratio.
+#wt-vault !The wt vault token bought (wt deployment only).
+
+#one-share
+_: 1;
+
+#wt-vault-assets
+_: erc4626-convert-to-assets(wt-vault 1);
+
+/* NYSE regular session for the UTC day of now(), as unix seconds: (open, close), or (0, 0) on a
+   weekend or NYSE holiday. Outside it DIA keeps re-posting the last close with a fresh timestamp
+   (measured 9-14 Oct and 21-22 Oct 2026: same value to the last digit, posts every ~50 min), so
+   the oracle timeout alone cannot tell a held close from a live price.
+   Calendar = the site's src/lib/utils/marketHours.ts (NYSE_HOLIDAYS, NYSE_EARLY_CLOSES), 2026-2027.
+   days = whole UTC days since 1970-01-01; NY date = UTC date between 13:30 and 21:00 UTC.
+   weekday: 0 = Sunday (1 Jan 1970 was a Thursday).
+   US daylight time (open 13:30 UTC, else 14:30 UTC): Sun 8 Mar - Sun 1 Nov 2026 (days 20520-20757),
+   Sun 14 Mar - Sun 7 Nov 2027 (days 20891-21128). Early closes 13:00 New York: 27 Nov 2026,
+   24 Dec 2026, 26 Nov 2027. */
+#us-session
+days: floor(div(now() 86400)),
+d4: add(days 4),
+weekday: sub(d4 mul(7 floor(div(d4 7)))),
+/* any() takes at most 15 inputs per op: 4 groups of 5. */
+holiday: any(
+  any(equal-to(days 20454) equal-to(days 20472) equal-to(days 20500) equal-to(days 20546) equal-to(days 20598))
+  any(equal-to(days 20623) equal-to(days 20637) equal-to(days 20703) equal-to(days 20783) equal-to(days 20812))
+  any(equal-to(days 20819) equal-to(days 20836) equal-to(days 20864) equal-to(days 20903) equal-to(days 20969))
+  any(equal-to(days 20987) equal-to(days 21004) equal-to(days 21067) equal-to(days 21147) equal-to(days 21176))),
+early-close: any(equal-to(days 20784) equal-to(days 20811) equal-to(days 21148)),
+dst: any(
+  every(greater-than-or-equal-to(days 20520) less-than(days 20758))
+  every(greater-than-or-equal-to(days 20891) less-than(days 21129))),
+trading-day: every(greater-than(weekday 0) less-than(weekday 6) is-zero(holiday)),
+open-utc: add(mul(days 86400) if(dst 48600 52200)),
+close-utc: add(open-utc if(early-close 12600 23400)),
+open close: if(trading-day open-utc 0) if(trading-day close-utc 0);
+
+#calculate-io
+using-words-from raindex-subparser dia-subparser erc4626-subparser
+price updated-at: dia-price(dia-id oracle-price-timeout),
+session-open session-close: call<'us-session>(),
+/* Fails closed after the 2027 calendar (00:00 UTC 1 Jan 2028). */
+:ensure(less-than(now() 1830297600) "Market calendar ended"),
+:ensure(every(greater-than-or-equal-to(now() session-open) less-than(now() session-close)) "US market closed"),
+/* The first seconds after the bell still show the held close until DIA's first post. */
+:ensure(greater-than-or-equal-to(updated-at session-open) "No oracle post since the open"),
+shares-per-token: call<'shares-per-token-fn>(),
+per-share: min(mul(price peg-multiplier) max-price),
+max-output: max-positive-value(),
+io: inv(mul(per-share shares-per-token));
+
+#handle-io
+:;
+
+#handle-add-order
+:;
