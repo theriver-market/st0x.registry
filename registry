@@ -16,6 +16,7 @@ river-ladder https://raw.githubusercontent.com/theriver-market/st0x.registry/e7a
 river-stop https://raw.githubusercontent.com/theriver-market/st0x.registry/e7acde5b4eab8e53a0cfd934a6543e86c914c4be/src/river-stop.rain
 river-cycle https://raw.githubusercontent.com/theriver-market/st0x.registry/e7acde5b4eab8e53a0cfd934a6543e86c914c4be/src/river-cycle.rain
 river-peg https://raw.githubusercontent.com/theriver-market/st0x.registry/e7acde5b4eab8e53a0cfd934a6543e86c914c4be/src/river-peg.rain
+river-peg-open https://raw.githubusercontent.com/theriver-market/st0x.registry/ed718996cf8cbcdae6451a34e734dde36a68b6dc/src/river-peg-open.rain
 river-peg-st0x https://raw.githubusercontent.com/theriver-market/st0x.registry/1552e81ff516ec3a26d47af3ba990386a350ad8e/src/river-peg-st0x.rain
 river-basket https://raw.githubusercontent.com/theriver-market/st0x.registry/e7acde5b4eab8e53a0cfd934a6543e86c914c4be/src/river-basket.rain
 river-basket-2 https://raw.githubusercontent.com/theriver-market/st0x.registry/e7acde5b4eab8e53a0cfd934a6543e86c914c4be/src/river-basket-2.rain
