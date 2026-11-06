@@ -1,9 +1,9 @@
 {
   "name": "ST0x Robinhood Chain Token List",
-  "timestamp": "2026-10-16T00:00:00.000Z",
+  "timestamp": "2026-11-06T00:00:00.000Z",
   "version": {
     "major": 1,
-    "minor": 3,
+    "minor": 4,
     "patch": 0
   },
   "keywords": [
@@ -1158,6 +1158,25 @@
         "tradingViewSymbol": "NYSE:DIS",
         "isin": "US2546871060",
         "tradingViewMarket": "america"
+      }
+    },
+    {
+      "chainId": 4663,
+      "address": "0xE828671B6EDd47122e4AcDE7aba6D12c58F244A3",
+      "decimals": 18,
+      "name": "Wrapped Soitec SA ST0x",
+      "symbol": "wtSOI",
+      "logoURI": "https://st0x.io/images/SOI.png",
+      "tags": [
+        "st0x"
+      ],
+      "extensions": {
+        "unwrappedAddress": "0xdab834808f67f8ac69642996a28571d4b2ad484e",
+        "receiptAddress": "0x7e26de68d52b54f9cbc8d64833c1feda82c36a92",
+        "category": "ST0x",
+        "tradingViewSymbol": "EURONEXT:SOI",
+        "isin": "FR0013227113",
+        "tradingViewMarket": "france"
       }
     }
   ]
