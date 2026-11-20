@@ -1,9 +1,9 @@
 {
   "name": "The River Base Token List (ST0x tokens not yet in the upstream list)",
-  "timestamp": "2026-11-18T11:20:00.000Z",
+  "timestamp": "2026-11-20T10:50:00.000Z",
   "version": {
     "major": 1,
-    "minor": 1,
+    "minor": 2,
     "patch": 0
   },
   "tags": {
@@ -114,6 +114,27 @@
         "tradingViewSymbol": "XETR:IFX",
         "isin": "DE0006231004",
         "tradingViewMarket": "germany",
+        "marketListed": true,
+        "marketQuote": false
+      }
+    },
+    {
+      "chainId": 8453,
+      "address": "0x5ED9f297f10e2b72950F5abc2c2B770ee831805b",
+      "decimals": 18,
+      "name": "Wrapped Technoprobe S.p.A. ST0x",
+      "symbol": "wtTPRO",
+      "logoURI": "https://st0x.io/images/TPRO.png",
+      "tags": [
+        "st0x"
+      ],
+      "extensions": {
+        "unwrappedAddress": "0x37a2b2d6fe9cfc474692a3a0016519332bd49509",
+        "receiptAddress": "0xee91994c5fede5bd9a2d6ed17cdeda12680b3ca2",
+        "category": "ST0x",
+        "tradingViewSymbol": "MIL:TPRO",
+        "isin": "IT0005482333",
+        "tradingViewMarket": "italy",
         "marketListed": true,
         "marketQuote": false
       }
