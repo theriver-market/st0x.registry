@@ -92,7 +92,7 @@ local-db-sync:
     sync-interval-ms: 5000
 using-tokens-from:
   - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/57a898cff8d964b5721e0d7d284ee9d501bb28d8/token-lists/base.json
-  - https://raw.githubusercontent.com/theriver-market/st0x.registry/0ce9e81cc77245a5a2fb776dd09939a91c8e698c/token-lists/river-base.json
+  - https://raw.githubusercontent.com/theriver-market/st0x.registry/e3f6b5462dc55b5d5e9e48d4898bba7afd271058/token-lists/river-base.json
   - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/57a898cff8d964b5721e0d7d284ee9d501bb28d8/token-lists/base-quotes.json
   - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/57a898cff8d964b5721e0d7d284ee9d501bb28d8/token-lists/ethereum.json
   - https://raw.githubusercontent.com/ST0x-Technology/st0x.registry/57a898cff8d964b5721e0d7d284ee9d501bb28d8/token-lists/ethereum-quotes.json
